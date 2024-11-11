@@ -1,0 +1,169 @@
+ services:
+   nginx:
+     build:
+       context: .
+       dockerfile: Dockerfile.nginx
+     container_name: nginx
+     restart: always
+     env_file:
+       - .env
+     ports:
+       - 80:80
+     volumes:
+       - ./conf/.htpasswd:/conf/.htpasswd
+       - ./logs:/logs
+       - ./download:/download
+     networks:
+       - server
+ 
+   web:
+     build:
+       context: .
+       dockerfile: Dockerfile
+     restart: always
+     container_name: web-svvp-download
+     ports:
+       - 8080:8000
+     volumes:
+       - ./src:/app
+       - ./download:/download
+     env_file:
+       - .env
+     environment:
+       - DEBUG=${DEBUG}
+       - DB_HOST=${DB_HOST}
+       - DB_NAME=${DB_NAME}
+       - DB_USER=${DB_USER}
+       - DB_PASSWORD=${DB_PASSWORD}
+       - DB_PORT=${DB_PORT}
+       - REDIS_HOST=${REDIS_HOST}
+       - REDIS_PORT=${REDIS_PORT}
+       - REDIS_PASSWORD=${REDIS_PASSWORD}
+       - COMPOSE_PROJECT_NAME=cache
+     command: python manage.py runserver 0.0.0.0:8000
+     entrypoint: /entrypoint.sh
+     depends_on:
+       - db
+       - redis
+     networks:
+       - server
+ 
+   celery:
+     build:
+       context: .
+       dockerfile: Dockerfile
+     restart: always
+     container_name: celery-svvp-download
+     volumes:
+       - ./src:/app
+       - ./download:/download
+     env_file:
+       - .env
+     environment:
+       - DEBUG=${DEBUG}
+       - DB_HOST=${DB_HOST}
+       - DB_NAME=${DB_NAME}
+       - DB_USER=${DB_USER}
+       - DB_PASSWORD=${DB_PASSWORD}
+       - DB_PORT=${DB_PORT}
+       - REDIS_HOST=${REDIS_HOST}
+       - REDIS_PORT=${REDIS_PORT}
+       - REDIS_PASSWORD=${REDIS_PASSWORD}
+       - COMPOSE_PROJECT_NAME=cache
+     depends_on:
+       - db
+       - redis
+ 
+     command: celery -A config worker -l info -c 3
+     entrypoint: /entrypoint.sh
+     networks:
+       - server
+ 
+   celery-beat:
+     build:
+       context: .
+       dockerfile: Dockerfile
+     restart: always
+     container_name: celery-beat-svvp-download
+     volumes:
+       - ./src:/app
+       - ./download:/download
+     env_file:
+       - .env
+     environment:
+       - DEBUG=${DEBUG}
+       - DB_HOST=${DB_HOST}
+       - DB_NAME=${DB_NAME}
+       - DB_USER=${DB_USER}
+       - DB_PASSWORD=${DB_PASSWORD}
+       - DB_PORT=${DB_PORT}
+       - REDIS_HOST=${REDIS_HOST}
+       - REDIS_PORT=${REDIS_PORT}
+       - REDIS_PASSWORD=${REDIS_PASSWORD}
+       - COMPOSE_PROJECT_NAME=cache
+     depends_on:
+       - db
+       - redis
+ 
+     command: celery -A config beat -l info
+     entrypoint: /entrypoint.sh
+     networks:
+       - server
+ 
+   redis:
+     image: docker-remote.bart.sec.samsung.net/redis
+     restart: always
+     container_name: redis-svvp-download
+     env_file:
+       - .env
+     environment:
+       - REDIS_PASSWORD=${REDIS_PASSWORD}
+       - COMPOSE_PROJECT_NAME=cache
+     command: redis-server --requirepass ${REDIS_PASSWORD}
+     networks:
+       - server
+ 
+   db:
+     image: docker-remote.bart.sec.samsung.net/postgres:12
+     restart: always
+     container_name: db-svvp-download
+     volumes:
+       - postgres_data_svvp-download:/var/lib/postgresql/data
+     env_file:
+       - .env
+     environment:
+       - POSTGRES_USER=${DB_USER}
+       - POSTGRES_PASSWORD=${DB_PASSWORD}
+       - POSTGRES_DB=${DB_NAME}
+       - COMPOSE_PROJECT_NAME=cache
+     networks:
+       - server
+       - postgres
+     healthcheck:
+       test: ["CMD-SHELL", "pg_isready -U postgres"]
+       interval: 10s
+       timeout: 5s
+       retries: 5
+ 
+   pgadmin:
+     image: docker-remote.bart.sec.samsung.net/dpage/pgadmin4
+     restart: always
+     environment:
+       - PGADMIN_DEFAULT_EMAIL=admin@domain.com
+       - PGADMIN_DEFAULT_PASSWORD=admin
+     volumes:
+       - postgres_admin_svvp-download:/var/lib/pgadmin
+     ports:
+       - 9000:80
+     container_name: pgadmin-svvp-download
+     networks:
+       - postgres
+ 
+ networks:
+   server:
+   postgres:
+     driver: bridge
+ 
+ volumes:
+   postgres_data_svvp-download:
+   postgres_admin_svvp-download:
